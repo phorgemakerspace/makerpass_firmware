@@ -55,6 +55,9 @@ String activeUser = "";
 String lastCardId = "";
 bool isWifiConnected = false;
 bool systemReady = false;  // New flag to track if system is fully configured
+unsigned long lastRelayOffTime = 0;  // Track when relay was turned off
+unsigned long lastAccessDeniedTime = 0;  // Track when access was denied
+const unsigned long READY_SCREEN_TIMEOUT = 5000;  // 5 seconds to return to main screen
 
 // Boot counter stored in RTC memory
 RTC_DATA_ATTR int bootCount = 0;
@@ -229,8 +232,8 @@ void loop() {
     digitalWrite(LED_RFID, LOW);
   }
   
-  // Only do full system operations if system is ready
-  if (systemReady) {
+  // Only do full system operations if system is ready OR if using master key
+  if (systemReady || (activeUser.length() > 0 && activeUser.equals(String(MASTER_RFID_KEY)))) {
     // Check if card present is required and card has been removed
     if (relayActive && cardPresentRequired) {
       // Consider card removed if no read in the last 2 seconds
@@ -251,11 +254,32 @@ void loop() {
       }
     }
     
-    // Update runtime display approximately once per second
+    // Update runtime display approximately once per second (only for machines)
     static unsigned long lastDisplayUpdate = 0;
-    if (relayActive && millis() - lastDisplayUpdate >= 1000) {
+    if (relayActive && !isDoor && millis() - lastDisplayUpdate >= 1000) {
       updateDisplay();
       lastDisplayUpdate = millis();
+    }
+    
+    // Check if relay has been off for 5 seconds and return to ready screen
+    if (!relayActive && lastRelayOffTime > 0 && millis() - lastRelayOffTime >= READY_SCREEN_TIMEOUT) {
+      if (systemReady) {
+        showMessage("MAKERPASS", "READY", "Scan RFID card", TFT_GREEN, 0);  // Stay on screen
+      } else {
+        // If system not ready, show master key only message
+        showMessage("CONFIG", "ERROR", "Master key only", TFT_RED, 0);
+      }
+      lastRelayOffTime = 0;  // Reset timer
+    }
+    
+    // Check if access was denied 5 seconds ago and return to ready screen
+    if (lastAccessDeniedTime > 0 && millis() - lastAccessDeniedTime >= READY_SCREEN_TIMEOUT) {
+      if (systemReady) {
+        showMessage("MAKERPASS", "READY", "Scan RFID card", TFT_GREEN, 0);  // Stay on screen
+      } else {
+        showMessage("CONFIG", "ERROR", "Master key only", TFT_RED, 0);
+      }
+      lastAccessDeniedTime = 0;  // Reset timer
     }
   }
   
@@ -497,22 +521,26 @@ void handleRFID(uint32_t cardId) {
   if (access) {
     Serial.println("ACCESS GRANTED");
     Serial.print("Access method: ");
+    Serial.println(String(cardIdStr).equals(String(MASTER_RFID_KEY)) ? "Master key" : "API validation");
     
-    // If system is not ready, only allow basic relay control with master key
-    if (!systemReady) {
-      Serial.println("Master key (system not ready)");
-      controlRelay(!relayActive);  // Toggle relay
-      activeUser = String(cardIdStr);
-      Serial.print("Relay state changed to: ");
-      Serial.println(relayActive ? "ACTIVE" : "INACTIVE");
-      showMessage("MASTER KEY", "ACCESS", relayActive ? "ACTIVATED" : "DEACTIVATED", TFT_GREEN, 2000);
+    // If system is not ready, only master key works
+    if (!systemReady && !String(cardIdStr).equals(String(MASTER_RFID_KEY))) {
+      Serial.println("System offline - only master key allowed");
+      showMessage("SYSTEM", "OFFLINE", "Use master key", TFT_RED, 2000);
+      lastAccessDeniedTime = millis();  // Start timer to return to main screen
       Serial.println("========================================");
       return;
     }
     
-    Serial.println(String(cardIdStr).equals(String(MASTER_RFID_KEY)) ? "Master key" : "API validation");
+    // Set default values for master key mode when system not ready
+    if (!systemReady) {
+      resourceName = "Master Key Mode";
+      isDoor = false;  // Default to machine behavior
+      cardPresentRequired = false;
+      doorOpenTime = DEFAULT_DOOR_OPEN_TIME;
+    }
     
-    // Normal system operation when fully configured
+    // Normal system operation for both API users and master key
     // Different behavior based on device type and current state
     if (!isDoor && relayActive) {
       // For machines that are active, scanning turns them off (toggle behavior)
@@ -530,22 +558,32 @@ void handleRFID(uint32_t cardId) {
         showMessage("ACCESS", "GRANTED", "Door unlocked", TFT_GREEN, 2000);
       } else {
         showMessage("ACCESS", "GRANTED", "Machine active", TFT_GREEN, 2000);
+        // For machines, show the active display immediately after the granted message
+        delay(2000);  // Wait for the granted message to be seen
+        updateDisplay();
       }
     }
   } else {
     Serial.println("ACCESS DENIED");
     
-    // Check if it was master key attempt or API failure
+    // Check if it was master key attempt or system/API failure
     if (String(cardIdStr).equals(String(MASTER_RFID_KEY))) {
       Serial.println("Reason: Master key failed (check MASTER_RFID_KEY setting)");
       showMessage("ACCESS", "DENIED", "Master key error", TFT_RED, 2000);
+      lastAccessDeniedTime = millis();  // Start timer to return to main screen
+    } else if (!systemReady) {
+      Serial.println("Reason: System offline - use master key");
+      showMessage("SYSTEM", "OFFLINE", "Use master key", TFT_RED, 2000);
+      lastAccessDeniedTime = millis();  // Start timer to return to main screen
     } else if (!isWifiConnected) {
       Serial.println("Reason: No WiFi connection");
       showMessage("ACCESS", "DENIED", "No WiFi", TFT_RED, 2000);
+      lastAccessDeniedTime = millis();  // Start timer to return to main screen
     } else {
       Serial.println("Reason: Unknown user or API error");
       // Show the card ID that the database would see
       showMessage("UNKNOWN USER", cardIdStr, "Access denied", TFT_RED, 3000);
+      lastAccessDeniedTime = millis();  // Start timer to return to main screen
     }
   }
   
@@ -555,9 +593,11 @@ void handleRFID(uint32_t cardId) {
   Serial.println(activeUser.length() > 0 ? activeUser : "None");
   Serial.println("========================================");
   
-  // Only update display if system is ready
-  if (systemReady) {
-    updateDisplay();
+  // Always update display when system is ready OR when using master key (but only for machines when active)
+  if (systemReady || String(cardIdStr).equals(String(MASTER_RFID_KEY))) {
+    if (!isDoor || !relayActive) {  // For doors, don't update display when relay is active (showing access granted)
+      updateDisplay();
+    }
   }
 }
 
@@ -570,18 +610,27 @@ bool checkAccess(String rfidCode) {
   Serial.print(equipmentId);
   Serial.println("'");
   
-  // Check master key first (works offline)
+  // Check master key first (works offline and online)
   if (rfidCode.equals(String(MASTER_RFID_KEY))) {
-    Serial.println("✓ MASTER KEY MATCH - Access granted offline");
+    Serial.println("✓ MASTER KEY MATCH - Access granted");
     return true;
   }
   
   Serial.print("Master key (");
   Serial.print(MASTER_RFID_KEY);
-  Serial.println(") does not match - checking API...");
+  Serial.println(") does not match");
+  
+  // If system is not ready, only master key works
+  if (!systemReady) {
+    Serial.println("✗ System offline - only master key allowed");
+    return false;
+  }
+  
+  // System is ready, check API for non-master keys
+  Serial.println("System ready - checking API...");
   
   if (!isWifiConnected) {
-    Serial.println("✗ No WiFi connection - access denied (only master key works offline)");
+    Serial.println("✗ No WiFi connection - access denied");
     return false;
   }
   
@@ -670,28 +719,33 @@ void updateDisplay() {
   tft.setCursor(10, 10);
   if (resourceName.length() > 0) {
     tft.print(resourceName);
-  } else {
+  } else if (systemReady) {
     tft.print("MakerPass Device");
+  } else {
+    tft.print("Master Key Mode");
   }
   
   // Display status
   tft.setCursor(10, 40);
-  tft.print("Status: ");
   if (relayActive) {
     tft.setTextColor(TFT_GREEN);
     tft.print("ACTIVE");
     
-    // Show runtime
+    // Show active user
     tft.setTextColor(TFT_WHITE);
     tft.setTextFont(1);
     tft.setTextSize(1);
+    tft.setCursor(10, 65);
+    tft.print("User: ");
+    tft.print(activeUser);
     
+    // Show runtime
     unsigned long runTime = (millis() - relayStartTime) / 1000;
     unsigned long hours = runTime / 3600;
     unsigned long minutes = (runTime % 3600) / 60;
     unsigned long seconds = runTime % 60;
     
-    tft.setCursor(10, 70);
+    tft.setCursor(10, 85);
     tft.print("Runtime: ");
     if (hours < 10) tft.print("0");
     tft.print(hours);
@@ -702,11 +756,11 @@ void updateDisplay() {
     if (seconds < 10) tft.print("0");
     tft.print(seconds);
     
-    // For doors, show remaining time
-    if (isDoor) {
+    // For doors, show remaining time (only if system is ready and configured)
+    if (isDoor && systemReady) {
       unsigned long remainingTime = (doorOpenTime - (millis() - relayStartTime)) / 1000;
       if (remainingTime > 0) {
-        tft.setCursor(10, 90);
+        tft.setCursor(10, 105);
         tft.print("Door closes in: ");
         tft.print(remainingTime);
         tft.print("s");
@@ -714,6 +768,7 @@ void updateDisplay() {
     }
     
   } else {
+    tft.print("Status: ");
     tft.setTextColor(TFT_RED);
     tft.print("INACTIVE");
     
@@ -721,7 +776,11 @@ void updateDisplay() {
     tft.setTextFont(1);
     tft.setTextSize(1);
     tft.setCursor(10, 70);
-    tft.print("Scan RFID card to activate");
+    if (systemReady) {
+      tft.print("Scan RFID card to activate");
+    } else {
+      tft.print("Scan master key to activate");
+    }
   }
   
   // WiFi status at bottom
@@ -743,6 +802,9 @@ void controlRelay(bool state) {
   
   if (state) {
     relayStartTime = millis();
+    lastRelayOffTime = 0;  // Clear the off timer
+  } else {
+    lastRelayOffTime = millis();  // Start the off timer
   }
   
   Serial.print("Relay ");
