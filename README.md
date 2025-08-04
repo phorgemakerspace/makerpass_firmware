@@ -1,6 +1,13 @@
 # MakerPass Firmware
 
-This firmware is designed for ESP32-based MakerPass hardware to control access to machines and doors using an RFID reader, interfacing with the MakerPass plugin for Moodle.
+This is firmware for custom ESP32-based MakerPass hardware to control access to machines and doors using RFID authentication, with full integration to the MakerPass plugin for Moodle.
+
+## Key Features
+
+- **Smart Device Types**: Automatic behavior for doors (timed unlock) vs machines (toggle on/off)
+- **Visual Feedback**: 1.9" TFT display with real-time status and runtime tracking
+- **Robust Connectivity**: Auto-reconnecting WiFi with graceful degradation
+- **Master Key Access**: Emergency offline access even when API/WiFi unavailable
 
 ## ⚠️ IMPORTANT: WiFi Requirements
 
@@ -11,17 +18,16 @@ This firmware is designed for ESP32-based MakerPass hardware to control access t
 - Common 2.4GHz network names: "MyNetwork", "MyNetwork_2.4G"
 - Common 5GHz network names: "MyNetwork_5G", "MyNetwork_5GHz"
 
-## Hardware Requirements
+## Bill of Materials
 
-- **ESP32-WROVER-IE** module
+- **MakerPass Baord** ESP32-WROVER-IE based PCB
 - **ST7789 1.9" TFT Display** (170x320 pixels)
 - **Wiegand RFID Reader** (125kHz/13.56MHz compatible)
-- **Relay module** for controlling doors/machines
-- **Status LEDs** (WiFi, Relay, RFID)
+- **WiFi Antenna** Mini-PCIe type 2 connector
 
 ## Pin Configuration
 
-The following pin assignments are based on the hardware schematic:
+The following pin assignments are based on the our custom hardware:
 
 ### Display (ST7789 TFT)
 - `TFT_DC` = GPIO 14
@@ -52,8 +58,8 @@ The following pin assignments are based on the hardware schematic:
 
 ### 1. Clone or Download Project
 ```bash
-git clone <repository-url>
-cd MakerPass
+git clone https://github.com/phorgemakerspace/makerpass_firmware.git
+cd makerpass_firmware
 ```
 
 ### 2. Project Structure
@@ -63,13 +69,16 @@ MakerPass/
 ├── README.md               # This file
 ├── src/
 │   ├── main.cpp            # Main firmware code
-│   └── config.h            # WiFi and API configuration
-└── .gitignore             # Git ignore file
+│   └── config.example.h    # WiFi and API configuration
+└── .gitignore              # Git ignore file
 ```
 
 ### 3. Configuration Setup
 
-Create or edit `src/config.h` with your specific settings:
+Create your configuration file:
+
+1. Copy `src/config.example.h` to `src/config.h` (or create a new one)
+2. Edit `src/config.h` with your specific settings:
 
 ```cpp
 /*
@@ -79,20 +88,27 @@ Create or edit `src/config.h` with your specific settings:
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// WiFi Configuration
-const char* WIFI_SSID = "Your_WiFi_Network";
-const char* WIFI_PASSWORD = "Your_WiFi_Password";
+// WiFi Configuration  
+const char* WIFI_SSID = "YOUR_WIFI_SSID";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
 // API Configuration
-const char* API_URL = "https://your-server.com";
-const char* API_KEY = "your_api_key_here";
+const char* API_URL = "https://your-moodle-site.com";
+const char* API_KEY = "your-api-key-here";
 const char* EQUIPMENT_ID = "1";
 
-// Default settings (used if not available from API)
-const unsigned long DEFAULT_DOOR_OPEN_TIME = 5000;  // 5 seconds in milliseconds
+// Master RFID Key (emergency offline access)
+const char* MASTER_RFID_KEY = "FFFFFFFF";  // Replace with your master card ID
+
+// Device Configuration (source of truth)
+const char* DEVICE_TYPE = "door";  // "door" or "machine"
 
 #endif
 ```
+
+**Important Notes:**
+- **Master Key**: Use 8 hex digits (e.g., "00CF195F") - works offline for emergency access
+- **Device Type**: "door" = timed unlock, "machine" = toggle on/off behavior (or card present behavior)
 
 ## Build and Upload Instructions
 
@@ -103,15 +119,14 @@ const unsigned long DEFAULT_DOOR_OPEN_TIME = 5000;  // 5 seconds in milliseconds
 - Install **PlatformIO IDE** extension from the marketplace
 
 #### 2. Open Project
-- File → Open Folder → Select the `MakerPass` directory
+- File → Open Folder → Select the `makerpass_firmware` directory
 - PlatformIO will automatically detect the `platformio.ini` file
 
 #### 3. Install Dependencies
 Libraries will be automatically installed based on `platformio.ini`:
-- ArduinoJson (JSON parsing)
-- Adafruit GFX Library (graphics)
-- Adafruit ST7789 Library (display driver)
-- Wiegand Protocol Library (RFID reader)
+- **ArduinoJson** v7.0.4+ (JSON parsing for API communication)
+- **TFT_eSPI** v2.5.43+ (Main TFT display library with optimized ESP32 support)
+- **Wiegand Protocol Library** (RFID reader communication - GitHub source)
 
 #### 4. Build Project
 - Click the **checkmark (✓)** in the PlatformIO toolbar
@@ -119,7 +134,7 @@ Libraries will be automatically installed based on `platformio.ini`:
 - Or `Cmd+Shift+P` → "PlatformIO: Build"
 
 #### 5. Upload to ESP32
-- Connect ESP32 via USB cable
+- Connect MakerPass board via USB cable
 - Click the **arrow (→)** in the PlatformIO toolbar
 - Or press `Ctrl+Alt+U` (Windows/Linux) or `Cmd+Alt+U` (macOS)
 - Or `Cmd+Shift+P` → "PlatformIO: Upload"
@@ -129,17 +144,14 @@ Libraries will be automatically installed based on `platformio.ini`:
 - Or press `Ctrl+Alt+S` (Windows/Linux) or `Cmd+Alt+S` (macOS)
 - Serial monitor will open at 115200 baud
 
-## Expected Boot Sequence
-
-When the firmware boots successfully, you should see:
-
 ### Serial Monitor Output
 ```
-MakerPass Starting...
-Setting up display...
+=== MAKERPASS SYSTEM STARTUP ===
+Initializing hardware...
+LED test...
+Device type: Door
 Initializing display...
 Display initialized successfully
-MakerPass Booting...
 Connecting to WiFi...
 SSID: Your_WiFi_Network
 WiFi connected successfully!
@@ -149,21 +161,23 @@ Retrieving resource configuration...
 API URL: https://your-server.com/api/resource/1
 HTTP Response Code: 200
 Resource configuration retrieved successfully
-Setting up RFID...
+Resource name: Front Door
 Initializing RFID reader...
-RFID D0 pin: 4
-RFID D1 pin: 5
 RFID reader initialized successfully
-Setup complete!
+=== SETUP COMPLETE ===
 ```
 
-### Display Output
-1. **"MakerPass Booting..."** - Initial startup
-2. **"WiFi connecting..."** - Network connection attempt
-3. **"WiFi Connected!"** - Successful connection (green text)
-4. **"Getting config..."** - API configuration retrieval
-5. **"Config loaded!"** - Successful API response (green text)
-6. **Main interface** - Shows device status, WiFi info, and instructions
+### Display Sequence
+1. **"MAKERPASS STARTING"**
+2. **"WIFI CONNECTING"**
+3. **"WIFI CONNECTED - Getting config"**
+4. **"CONFIG LOADED"**
+5. **"MAKERPASS READY"**
+
+### Error Handling
+- **WiFi Errors**: Shows "WIFI ERROR - Master key only"
+- **API Errors**: Shows "CONFIG ERROR - Master key only"  
+- **Master Key Mode**: Device remains functional with offline access
 
 ### Status LEDs
 - **WiFi LED (GPIO 27)** - Solid when connected to WiFi
@@ -176,10 +190,9 @@ Setup complete!
 
 #### Library Not Found
 ```bash
-# Manually install missing libraries
+# Manually install missing libraries if needed
 pio lib install "bblanchon/ArduinoJson"
-pio lib install "adafruit/Adafruit GFX Library"
-pio lib install "adafruit/Adafruit ST7735 and ST7789 Library"
+pio lib install "bodmer/TFT_eSPI"
 ```
 
 #### Wiegand Library Issues
@@ -203,9 +216,11 @@ The Wiegand library is installed from GitHub. If issues occur:
 - Check Wiegand wiring (D0, D1 pins)
 - Verify RFID reader power supply
 - Test with known working RFID cards
+- Check RFID card frequency (card should be 125kHz/13.56MHz)
 
 #### API Connection Issues
 - Verify API_URL and API_KEY in `config.h`
+- API_URL should not have a trailing `/`
 - Check server is accessible from device's network
 - Monitor serial output for HTTP response codes
 
@@ -219,25 +234,38 @@ The Wiegand library is installed from GitHub. If issues occur:
 
 ## API Integration
 
-The device communicates with the MakerPass Moodle plugin via REST API:
+The device uses a simple API architecture with the MakerPass Moodle plugin:
 
 ### Endpoints Used
-- `GET /api/resource/{id}` - Retrieve device configuration
+- `GET /api/resource/{id}` - Retrieve device name and requirements
 - `POST /api/check_access` - Validate RFID card access
 
-### Expected API Responses
+### API Request/Response
 
-#### Resource Configuration
+#### Resource Configuration Request
+```
+GET /api/resource/1
+Headers: X-API-KEY: your-api-key
+```
+
+#### Resource Configuration Response (Simplified)
 ```json
 {
   "name": "Front Door",
-  "type": "door",
-  "relay_time": 5,
   "card_present_required": true
 }
 ```
 
-#### Access Check
+#### Access Check Request  
+```json
+{
+  "api_key": "your-api-key",
+  "rfid": "00CF195F", 
+  "resource_id": "1"
+}
+```
+
+#### Access Check Response
 ```json
 {
   "status": "granted",
@@ -245,47 +273,68 @@ The device communicates with the MakerPass Moodle plugin via REST API:
 }
 ```
 
+### Configuration Architecture
+- **API provides**: Device name, card presence requirements
+- **Local config.h controls**: Device type (door/machine), WiFi, master key
+- **Internal defaults**: Relay timing (5s for doors), timeout behavior (3s messages)
+
+### Fallback Behavior
+- **No WiFi/API**: Master key still works for emergency access
+- **API errors**: Device displays error but remains functional with master key
+- **Network drops**: Auto-reconnection with graceful degradation
+
 ## Development Notes
 
 ### Code Structure
-- `setup()` - Hardware initialization and configuration
-- `loop()` - Main program loop, handles RFID reads and status updates
-- `connectToWifi()` - WiFi connection management
-- `retrieveResourceConfig()` - API configuration retrieval
-- `handleRFID()` - Process RFID card reads
-- `updateDisplay()` - Update TFT display content
+- `setup()` - Hardware initialization, WiFi connection, API configuration
+- `loop()` - RFID monitoring, WiFi management, relay control, display updates
+- `handleRFID()` - Process card scans with visual feedback and access validation
+- `checkAccess()` - Master key check first, then API validation with detailed logging
+- `showMessage()` - Unified message display with automatic timeout handling
+- `updateDisplay()` - Real-time runtime tracking for active machines
+- `showMainScreen()` - Main interface with device status and instructions
 
-### Key Features
-- **Automatic WiFi reconnection** - Handles network drops
-- **API fallback** - Works with defaults if API unavailable
-- **Visual feedback** - Status LEDs and display messages
-- **Serial debugging** - Comprehensive logging output
-- **Card presence detection** - For machines requiring continuous card presence
+### Device Behavior Differences
 
-### Board Configuration
-The `platformio.ini` file is configured for Generic ESP32. Modify the `board` setting if using a different ESP32 variant:
+#### Door Mode (`DEVICE_TYPE = "door"`)
+- **Single scan**: Unlocks door for configured time (default 5 seconds)
+- **Automatic lock**: Relay deactivates after timer expires
+- **Display**: Shows "ACCESS GRANTED - Door unlocked" then returns to main screen
+- **LED feedback**: Relay LED on during unlock period
 
-```ini
-board = esp32dev           # Generic ESP32
-board = esp32-wrover-kit   # ESP32-WROVER
-board = esp32s3dev         # ESP32-S3
-```
+#### Machine Mode (`DEVICE_TYPE = "machine"`)  
+- **Toggle behavior**: First scan activates, second scan deactivates
+- **Runtime tracking**: Live display shows elapsed time (HH:MM:SS format)
+- **Active display**: Stays on runtime screen while machine is active
+- **User tracking**: Shows which card activated the machine
+
+### Error Handling & Debugging
+- **Comprehensive logging**: All RFID scans logged with card ID and decision rationale
+- **API transparency**: Request/response data logged for troubleshooting
+- **Master key validation**: Clear logging of master key match/mismatch
+- **Network resilience**: Auto-reconnection with status feedback
+
+## Production Status
+
+This firmware is **BETA** with the following optimizations:
+
+### ✅ Completed Features
+- **Hardware Integration**: Full ESP32 + TFT + Wiegand RFID support
+- **API Integration**: Simplified, robust communication with MakerPass backend
+- **Master Key System**: Reliable offline emergency access
+- **User Interface**: Informative display messaging
+- **Device Types**: Smart door vs machine behavior with runtime tracking
+- **Error Handling**: Graceful degradation and comprehensive logging
 
 ## Support
 
 For technical support or questions:
 - Check the troubleshooting section above
-- Review serial monitor output for error details
+- Review serial monitor output for detailed error logging
 - Verify hardware connections match pin definitions
+- Test with master key for offline functionality
 
+---
 
-modify the auto-flash circuit. You can:
-
-Add a pull-up resistor (10kΩ) from GPIO0 to 3.3V
-Add a reset capacitor (100nF) from ENABLE to GND
-Modify the auto-flash circuit to be less aggressive
-Option 4: Bypass Auto-Flash
-If the auto-flash circuit is causing problems, you can temporarily disable it by:
-
-Removing or lifting resistors R12/R13 from the board
-This will require manual BOOT+ENABLE button presses for programming, but eliminate power-cycle issues
+**MakerPass Firmware v0.1** - BETA
+*ESP32-based RFID access control with Moodle integration*

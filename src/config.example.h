@@ -19,7 +19,7 @@ const char* EQUIPMENT_ID = "1";
 // Master RFID Key (works offline for emergency access)
 const char* MASTER_RFID_KEY = "FFFFFFFF";  // Replace with your master card ID (8 hex digits)
 
-// Default settings (used if not available from API)
-const unsigned long DEFAULT_DOOR_OPEN_TIME = 5000;  // Door relay active time in milliseconds (5 seconds default)
+// Device Configuration
+const char* DEVICE_TYPE = "door";  // "door" or "machine"
 
 #endif

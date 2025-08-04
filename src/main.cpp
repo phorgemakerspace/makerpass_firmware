@@ -53,8 +53,8 @@ unsigned long relayStartTime = 0;
 String activeUser = "";
 bool isWifiConnected = false;
 bool systemReady = false;
-unsigned long lastMessageTime = 0;  // Track when a message was shown
-const unsigned long MAIN_SCREEN_TIMEOUT = 3000;  // 3 seconds to return to main screen
+const unsigned long MAIN_SCREEN_TIMEOUT = 3000;  // Default message display time before returning to main screen
+const unsigned long DEFAULT_DOOR_OPEN_TIME = 5000;  // Default door open time in milliseconds (5 seconds)
 
 // Function declarations
 bool connectToWifi();
@@ -115,28 +115,36 @@ void setup() {
   apiUrl = String(API_URL);
   apiKey = String(API_KEY);
   equipmentId = String(EQUIPMENT_ID);
-  doorOpenTime = DEFAULT_DOOR_OPEN_TIME;
+  
+  // Set device configuration from config.h
+  isDoor = (String(DEVICE_TYPE).equalsIgnoreCase("door"));
+  doorOpenTime = DEFAULT_DOOR_OPEN_TIME;  // Use internal default
+  cardPresentRequired = false;  // Default value, may be overridden by API
+  
+  // Log configuration
+  Serial.print("Device type: ");
+  Serial.println(isDoor ? "Door" : "Machine");
   
   // Setup display
   Serial.println("Initializing display...");
   setupDisplay();
   
   // Show startup message
-  showMessage("MAKERPASS", "STARTING", "Please wait...", TFT_BLUE, 2000);
+  showMessage("MAKERPASS", "STARTING", "Please wait...", TFT_BLUE, 0);
   
   // Connect to WiFi
   Serial.println("Connecting to WiFi...");
-  showMessage("WIFI", "CONNECTING", "Please wait...", TFT_YELLOW, 1000);
+  showMessage("WIFI", "CONNECTING", "Please wait...", TFT_YELLOW, 0);
   isWifiConnected = connectToWifi();
   
   if (isWifiConnected) {
-    showMessage("WIFI", "CONNECTED", "Getting config...", TFT_GREEN, 1500);
+    showMessage("WIFI", "CONNECTED", "Getting config...", TFT_GREEN, 0);
     
     // Get resource configuration from API
     Serial.println("Retrieving resource configuration...");
     bool configSuccess = retrieveResourceConfig();
     if (configSuccess) {
-      showMessage("CONFIG", "LOADED", resourceName, TFT_GREEN, 2000);
+      showMessage("CONFIG", "LOADED", resourceName, TFT_GREEN, 0);
       systemReady = true;
     } else {
       showMessage("CONFIG", "ERROR", "Master key only", TFT_RED, 0);  // Stay on error screen
@@ -162,10 +170,9 @@ void setup() {
   
   // Final startup message
   if (systemReady) {
-    showMessage("MAKERPASS", "READY", "Scan RFID card", TFT_GREEN, 2000);
+    showMessage("MAKERPASS", "READY", "Scan RFID card", TFT_GREEN, MAIN_SCREEN_TIMEOUT);
     Serial.println("=== SETUP COMPLETE ===");
-    // Show main screen
-    showMainScreen();
+    // Show main screen - this will be called by showMessage automatically
   } else {
     // System not fully configured, but master key will work
     Serial.println("=== SETUP COMPLETE (MASTER KEY MODE) ===");
@@ -195,6 +202,11 @@ void showMessage(String line1, String line2, String line3, uint16_t color, int d
   tft.print(line3);
   
   delay(duration);
+  
+  // Only return to main screen if duration > 0 (permanent messages stay on screen)
+  if (duration > 0) {
+    showMainScreen();
+  }
 }
 
 void loop() {
@@ -253,15 +265,6 @@ void loop() {
     if (relayActive && !isDoor && millis() - lastDisplayUpdate >= 1000) {
       updateDisplay();
       lastDisplayUpdate = millis();
-    }
-  }
-  
-  // Return to main screen after 5 seconds of any message
-  if (lastMessageTime > 0 && millis() - lastMessageTime >= MAIN_SCREEN_TIMEOUT) {
-    // Only return to main screen if we're not showing runtime for an active machine
-    if (!relayActive || isDoor) {
-      showMainScreen();
-      lastMessageTime = 0;  // Reset timer
     }
   }
   
@@ -350,24 +353,10 @@ bool retrieveResourceConfig() {
     DeserializationError error = deserializeJson(doc, response);
     
     if (!error) {
+      // Only get device name from API
       resourceName = doc["name"].as<String>();
       
-      if (doc["type"].is<String>()) {
-        String type = doc["type"].as<String>();
-        isDoor = (type.equalsIgnoreCase("door"));
-      } else {
-        isDoor = false;
-      }
-      
-      if (doc["relay_time"].is<unsigned long>()) {
-        unsigned long configuredTime = doc["relay_time"].as<unsigned long>();
-        if (configuredTime > 0) {
-          doorOpenTime = configuredTime * 1000;
-        } else {
-          doorOpenTime = DEFAULT_DOOR_OPEN_TIME;
-        }
-      }
-      
+      // Only get card_present_required from API (defaults to false)
       if (doc["card_present_required"].is<bool>()) {
         cardPresentRequired = doc["card_present_required"].as<bool>();
       } else {
@@ -377,20 +366,22 @@ bool retrieveResourceConfig() {
       Serial.println("Resource configuration retrieved successfully");
       Serial.print("Resource name: ");
       Serial.println(resourceName);
-      Serial.print("Resource type: ");
+      Serial.print("Resource type (from config): ");
       Serial.println(isDoor ? "Door" : "Machine");
+      Serial.print("Card present required: ");
+      Serial.println(cardPresentRequired ? "YES" : "NO");
       
       success = true;
     } else {
       Serial.print("JSON parsing error: ");
       Serial.println(error.c_str());
-      isDoor = (String(DEFAULT_DEVICE_TYPE).equalsIgnoreCase("door"));
+      // Keep config.h values, just reset card present requirement
       cardPresentRequired = false;
     }
   } else {
     Serial.print("HTTP error: ");
     Serial.println(httpCode);
-    isDoor = (String(DEFAULT_DEVICE_TYPE).equalsIgnoreCase("door"));
+    // Keep config.h values, just reset card present requirement
     cardPresentRequired = false;
   }
   
@@ -446,13 +437,18 @@ void handleRFID(uint32_t cardId) {
   // Visual/audio feedback
   digitalWrite(RFID_BEEP, HIGH);
   digitalWrite(RFID_LED, HIGH);
-  showMessage("SCANNING", "CARD", "Please wait...", TFT_YELLOW, 500);
-  digitalWrite(RFID_BEEP, LOW);
-  digitalWrite(RFID_LED, LOW);
+  showMessage("SCANNING", "CARD", "Please wait...", TFT_YELLOW, 0);  // Stay on screen during check
   
   // Check access with API (or master key)
   Serial.println("Checking access...");
   bool access = checkAccess(String(cardIdStr));
+  
+  // Turn off feedback after check completes
+  digitalWrite(RFID_BEEP, LOW);
+  digitalWrite(RFID_LED, LOW);
+  
+  // Ensure scanning message is visible for at least a brief moment
+  delay(500);
   
   if (access) {
     Serial.println("ACCESS GRANTED");
@@ -462,8 +458,7 @@ void handleRFID(uint32_t cardId) {
     // If system is not ready, only master key works
     if (!systemReady && !String(cardIdStr).equals(String(MASTER_RFID_KEY))) {
       Serial.println("System offline - only master key allowed");
-      showMessage("ACCESS", "DENIED", "Use master key", TFT_RED, 2000);
-      lastMessageTime = millis();  // Start timer to return to main screen
+      showMessage("ACCESS", "DENIED", "Use master key", TFT_RED, MAIN_SCREEN_TIMEOUT);
       Serial.println("========================================");
       return;
     }
@@ -471,9 +466,8 @@ void handleRFID(uint32_t cardId) {
     // Set default values for master key mode when system not ready
     if (!systemReady) {
       // Don't set resourceName here - display logic handles it based on systemReady state
-      isDoor = (String(DEFAULT_DEVICE_TYPE).equalsIgnoreCase("door"));  // Use config default
+      // Device type and relay time are already set from config.h
       cardPresentRequired = false;
-      doorOpenTime = DEFAULT_DOOR_OPEN_TIME;
     }
     
     // Normal system operation for both API users and master key
@@ -499,8 +493,7 @@ void handleRFID(uint32_t cardId) {
       
       controlRelay(false);
       activeUser = "";
-      showMessage("ACCESS", "ENDED", "Runtime: " + runtimeStr, TFT_BLUE, 2000);
-      lastMessageTime = millis();  // Start timer to return to main screen
+      showMessage("ACCESS", "ENDED", "Runtime: " + runtimeStr, TFT_BLUE, MAIN_SCREEN_TIMEOUT);
     } else {
       // For doors or inactive machines, turn on the relay
       Serial.print("Activating ");
@@ -508,12 +501,28 @@ void handleRFID(uint32_t cardId) {
       controlRelay(true);
       activeUser = String(cardIdStr);
       if (isDoor) {
-        showMessage("ACCESS", "GRANTED", "Door unlocked", TFT_GREEN, 2000);
-        lastMessageTime = millis();  // Start timer to return to main screen
+        showMessage("ACCESS", "GRANTED", "Door unlocked", TFT_GREEN, MAIN_SCREEN_TIMEOUT);
       } else {
-        showMessage("ACCESS", "GRANTED", "Machine active", TFT_GREEN, 2000);
-        // For machines, show the runtime display after the granted message
-        lastMessageTime = millis() + 2000;  // Wait for the granted message to be seen
+        // For machines, show brief confirmation then switch to runtime display
+        tft.fillScreen(TFT_BLACK);
+        tft.setTextColor(TFT_GREEN);
+        tft.setTextFont(4);
+        tft.setTextSize(1);
+        
+        tft.setCursor(20, 30);
+        tft.print("ACCESS");
+        tft.setCursor(20, 70);
+        tft.print("GRANTED");
+        
+        tft.setTextColor(TFT_WHITE);
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+        tft.setCursor(20, 120);
+        tft.print("Machine active");
+        
+        delay(1500);
+        
+        // Switch directly to runtime display (stay there)
         updateDisplay();
       }
     }
@@ -523,21 +532,17 @@ void handleRFID(uint32_t cardId) {
     // Check if it was master key attempt or system/API failure
     if (String(cardIdStr).equals(String(MASTER_RFID_KEY))) {
       Serial.println("Reason: Master key failed (check MASTER_RFID_KEY setting)");
-      showMessage("ACCESS", "DENIED", "Master key error", TFT_RED, 2000);
-      lastMessageTime = millis();  // Start timer to return to main screen
+      showMessage("ACCESS", "DENIED", "Master key error", TFT_RED, MAIN_SCREEN_TIMEOUT);
     } else if (!systemReady) {
       Serial.println("Reason: System offline - use master key");
-      showMessage("ACCESS", "DENIED", "Use master key", TFT_RED, 2000);
-      lastMessageTime = millis();  // Start timer to return to main screen
+      showMessage("ACCESS", "DENIED", "Use master key", TFT_RED, MAIN_SCREEN_TIMEOUT);
     } else if (!isWifiConnected) {
       Serial.println("Reason: No WiFi connection");
-      showMessage("ACCESS", "DENIED", "No WiFi", TFT_RED, 2000);
-      lastMessageTime = millis();  // Start timer to return to main screen
+      showMessage("ACCESS", "DENIED", "No WiFi", TFT_RED, MAIN_SCREEN_TIMEOUT);
     } else {
       Serial.println("Reason: Unknown user or API error");
-      // Show the card ID that the database would see
-      showMessage("UNKNOWN USER", cardIdStr, "Access denied", TFT_RED, 3000);
-      lastMessageTime = millis();  // Start timer to return to main screen
+      // Show the card ID that the database would see - keep this one longer for readability
+      showMessage("UNKNOWN USER", cardIdStr, "Access denied", TFT_RED, MAIN_SCREEN_TIMEOUT + 1000);
     }
   }
   
