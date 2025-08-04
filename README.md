@@ -234,42 +234,75 @@ The Wiegand library is installed from GitHub. If issues occur:
 
 ## API Integration
 
-The device uses a simple API architecture with the MakerPass Moodle plugin:
+The device uses the updated MakerPass API specification:
 
 ### Endpoints Used
-- `GET /api/resource/{id}` - Retrieve device name and requirements
-- `POST /api/check_access` - Validate RFID card access
+- `GET /api/makerpass.php/resource` - Retrieve device configuration
+- `POST /api/makerpass.php/check_access` - Validate RFID card access
+
+### Authentication
+All requests use header-based authentication:
+```
+X-API-Key: YOUR_API_KEY
+```
 
 ### API Request/Response
 
 #### Resource Configuration Request
 ```
-GET /api/resource/1
-Headers: X-API-KEY: your-api-key
+GET /api/makerpass.php/resource
+Headers: 
+  X-API-Key: your-api-key
+  X-Resource-ID: 1
 ```
 
-#### Resource Configuration Response (Simplified)
+#### Resource Configuration Response
 ```json
 {
+  "resource_id": 1,
   "name": "Front Door",
   "card_present_required": true
 }
 ```
 
 #### Access Check Request  
-```json
-{
-  "api_key": "your-api-key",
-  "rfid": "00CF195F", 
-  "resource_id": "1"
-}
+```
+POST /api/makerpass.php/check_access
+Headers:
+  Content-Type: application/json
+  X-API-Key: your-api-key
+  X-RFID: 00CF195F
+  X-Resource-ID: 1
+Body: (empty - data passed in headers)
 ```
 
 #### Access Check Response
 ```json
 {
   "status": "granted",
-  "user": "john.doe"
+  "reason": "granted"
+}
+```
+
+#### Access Denied Response
+```json
+{
+  "status": "denied", 
+  "reason": "invalid_rfid"
+}
+```
+
+### Error Handling
+The firmware handles these HTTP status codes:
+- **400**: Bad request (invalid parameters)
+- **401**: Unauthorized (invalid API key)
+- **405**: Method not allowed (wrong endpoint)
+- **500**: Server error
+
+#### Error Response Format
+```json
+{
+  "error": "Invalid API key"
 }
 ```
 

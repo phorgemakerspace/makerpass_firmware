@@ -322,21 +322,20 @@ bool connectToWifi() {
 }
 
 bool retrieveResourceConfig() {
-
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi not connected - cannot retrieve config");
     return false;
   }
   
   HTTPClient http;
-  String url = apiUrl + "/api/resource/" + equipmentId;
+  String url = apiUrl + "/api/makerpass.php/resource";
   
   Serial.print("API URL: ");
   Serial.println(url);
   
   http.begin(url);
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-API-KEY", apiKey);
+  http.addHeader("X-API-Key", apiKey);
+  http.addHeader("X-Resource-ID", equipmentId);
   
   int httpCode = http.GET();
   bool success = false;
@@ -353,10 +352,10 @@ bool retrieveResourceConfig() {
     DeserializationError error = deserializeJson(doc, response);
     
     if (!error) {
-      // Only get device name from API
+      // Get device name and settings from API
       resourceName = doc["name"].as<String>();
       
-      // Only get card_present_required from API (defaults to false)
+      // Get card_present_required from API (defaults to false)
       if (doc["card_present_required"].is<bool>()) {
         cardPresentRequired = doc["card_present_required"].as<bool>();
       } else {
@@ -381,6 +380,35 @@ bool retrieveResourceConfig() {
   } else {
     Serial.print("HTTP error: ");
     Serial.println(httpCode);
+    
+    // Handle specific error responses
+    if (httpCode == 400) {
+      Serial.println("Bad request - check API parameters");
+    } else if (httpCode == 401) {
+      Serial.println("Unauthorized - check API key");
+    } else if (httpCode == 405) {
+      Serial.println("Method not allowed - check endpoint");
+    } else if (httpCode == 500) {
+      Serial.println("Server error");
+    }
+    
+    // Try to parse error response
+    if (httpCode > 0) {
+      String errorResponse = http.getString();
+      if (errorResponse.length() > 0) {
+        Serial.print("Error response: ");
+        Serial.println(errorResponse);
+        
+        JsonDocument errorDoc;
+        if (deserializeJson(errorDoc, errorResponse) == DeserializationError::Ok) {
+          if (errorDoc["error"].is<String>()) {
+            Serial.print("Server error message: ");
+            Serial.println(errorDoc["error"].as<String>());
+          }
+        }
+      }
+    }
+    
     // Keep config.h values, just reset card present requirement
     cardPresentRequired = false;
   }
@@ -587,27 +615,23 @@ bool checkAccess(String rfidCode) {
   }
   
   HTTPClient http;
-  String url = apiUrl + "/api/check_access";
+  String url = apiUrl + "/api/makerpass.php/check_access";
   
   Serial.print("API Request URL: ");
   Serial.println(url);
   
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-API-Key", apiKey);
+  http.addHeader("X-RFID", rfidCode);
+  http.addHeader("X-Resource-ID", equipmentId);
   
-  JsonDocument doc;
-  doc["api_key"] = apiKey;
-  doc["rfid"] = rfidCode;
-  doc["resource_id"] = equipmentId;
+  Serial.print("API Request headers: ");
+  Serial.println("X-API-Key: " + apiKey);
+  Serial.println("X-RFID: " + rfidCode);
+  Serial.println("X-Resource-ID: " + equipmentId);
   
-  String payload;
-  serializeJson(doc, payload);
-  
-  Serial.print("API Request payload: ");
-  Serial.println(payload);
-  Serial.println("^ This is exactly what the database receives");
-  
-  int httpCode = http.POST(payload);
+  int httpCode = http.POST("");  // Empty body since data is in headers
   bool access = false;
   
   Serial.print("API Response code: ");
@@ -634,13 +658,15 @@ bool checkAccess(String rfidCode) {
         String reason = responseDoc["reason"].as<String>();
         Serial.print("✗ Access denied reason: ");
         Serial.println(reason);
+        
+        // Log specific denial reasons
+        if (reason == "invalid_rfid") {
+          Serial.println("RFID card not found in database");
+        } else if (reason == "access_not_permitted") {
+          Serial.println("User does not have permission for this resource");
+        }
       } else if (access) {
         Serial.println("✓ API Access granted");
-        if (responseDoc["user"].is<String>()) {
-          String userName = responseDoc["user"].as<String>();
-          Serial.print("User: ");
-          Serial.println(userName);
-        }
       }
     } else {
       Serial.print("✗ JSON parsing error: ");
@@ -649,11 +675,34 @@ bool checkAccess(String rfidCode) {
   } else {
     Serial.print("✗ HTTP error: ");
     Serial.println(httpCode);
+    
+    // Handle specific error responses
+    if (httpCode == 400) {
+      Serial.println("Bad request - check RFID format or resource ID");
+    } else if (httpCode == 401) {
+      Serial.println("Unauthorized - check API key");
+    } else if (httpCode == 405) {
+      Serial.println("Method not allowed - check endpoint");
+    } else if (httpCode == 500) {
+      Serial.println("Server error");
+    }
+    
+    // Try to parse error response
     if (httpCode > 0) {
       String errorResponse = http.getString();
-      Serial.print("Error response: ");
-      Serial.println(errorResponse);
-      Serial.println("^ This is what the database/server returned");
+      if (errorResponse.length() > 0) {
+        Serial.print("Error response: ");
+        Serial.println(errorResponse);
+        Serial.println("^ This is what the database/server returned");
+        
+        JsonDocument errorDoc;
+        if (deserializeJson(errorDoc, errorResponse) == DeserializationError::Ok) {
+          if (errorDoc["error"].is<String>()) {
+            Serial.print("Server error message: ");
+            Serial.println(errorDoc["error"].as<String>());
+          }
+        }
+      }
     }
   }
   
