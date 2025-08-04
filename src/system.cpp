@@ -84,19 +84,38 @@ void runMainLoop() {
   }
 
   // Check for new card reads (always check for master key)
+  // RFID card processing - clean and simple
   if (wiegand.available()) {
-    digitalWrite(LED_RFID, HIGH);
     uint32_t cardId = wiegand.getCode();
-
-    // Update the last card time
+    
+    // Log successful detection
+    Serial.print("RFID card detected: ");
+    Serial.println(cardId, HEX);
+    
+    // Process card read
+    digitalWrite(LED_RFID, HIGH);
     lastCardTime = millis();
 
     // Convert card ID to string
     char cardIdStr[16];
     sprintf(cardIdStr, "%08X", cardId);
+    
+    Serial.print("Processing card: ");
+    Serial.println(cardIdStr);
 
     handleRFID(cardId);
     digitalWrite(LED_RFID, LOW);
+  }
+
+  // Check for message timeout
+  if (messageActive && millis() >= messageExpireTime) {
+    messageActive = false;
+    messageExpireTime = 0;
+    if (relayActive) {
+      updateDisplay(); // Show runtime screen
+    } else {
+      showMainScreen(); // Show main screen
+    }
   }
 
   // Only do full system operations if system is ready OR if using master key

@@ -27,6 +27,10 @@ String activeUser = "";
 bool isWifiConnected = false;
 bool systemReady = false;
 
+// Message display timing
+unsigned long messageExpireTime = 0;
+bool messageActive = false;
+
 void setup() {
   // Set boot pins to safe states
   pinMode(0, INPUT_PULLUP);  // GPIO0 - boot pin

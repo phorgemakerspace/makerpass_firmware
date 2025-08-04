@@ -44,11 +44,20 @@ void showMessage(String line1, String line2, String line3, uint16_t color, int d
   tft.setCursor(x, 120);
   tft.print(line3);
   
-  delay(duration);
-  
-  // Only return to main screen if duration > 0 (permanent messages stay on screen)
-  if (duration > 0) {
+  if (duration == 0) {
+    // Permanent message
+    messageActive = false;
+    messageExpireTime = 0;
+  } else if (duration <= 500) {
+    // Short message with blocking delay
+    delay(duration);
     showMainScreen();
+    messageActive = false;
+    messageExpireTime = 0;
+  } else {
+    // Long message with non-blocking timing
+    messageActive = true;
+    messageExpireTime = millis() + duration;
   }
 }
 
@@ -110,6 +119,19 @@ void updateDisplay() {
   // Force a full refresh if the relay state or active user changes
   bool needFullRefresh = (relayActive != lastRelayState) || (activeUser != lastActiveUser);
 
+  // If relay just turned off, show main screen and don't process further
+  if (!relayActive && lastRelayState) {
+    lastRelayState = relayActive;
+    lastActiveUser = activeUser;
+    showMainScreen();
+    return;
+  }
+
+  // Only proceed if relay is active
+  if (!relayActive) {
+    return;
+  }
+
   if (needFullRefresh) {
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE);
@@ -128,18 +150,14 @@ void updateDisplay() {
 
     // Display status
     tft.setCursor(10, 45);
-    if (relayActive) {
-      tft.setTextColor(TFT_GREEN);
-      tft.print("Active");
-      tft.setTextColor(TFT_WHITE);
-      tft.setTextFont(2);
-      tft.setTextSize(1);
-      tft.setCursor(10, 75);
-      tft.print("User: ");
-      tft.print(activeUser);
-    } else {
-      showMainScreen();
-    }
+    tft.setTextColor(TFT_GREEN);
+    tft.print("Active");
+    tft.setTextColor(TFT_WHITE);
+    tft.setTextFont(2);
+    tft.setTextSize(1);
+    tft.setCursor(10, 75);
+    tft.print("User: ");
+    tft.print(activeUser);
 
     // WiFi status at bottom
     tft.setTextColor(TFT_WHITE);

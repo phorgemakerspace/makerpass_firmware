@@ -44,6 +44,10 @@ extern String activeUser;
 extern bool isWifiConnected;
 extern bool systemReady;
 
+// Message display timing
+extern unsigned long messageExpireTime;
+extern bool messageActive;
+
 // Hardware objects
 extern TFT_eSPI tft;
 extern WIEGAND wiegand;

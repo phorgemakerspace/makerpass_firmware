@@ -41,6 +41,15 @@ void initializeHardware() {
 }
 
 void setupRFID() {
+  Serial.println("Setting up RFID reader...");
+  
+  // Ensure pins are in correct mode before Wiegand setup
+  pinMode(RFID_D0, INPUT_PULLUP);
+  pinMode(RFID_D1, INPUT_PULLUP);
+  
+  // Small delay to ensure pins stabilize
+  delay(10);
+  
   wiegand.begin(RFID_D0, RFID_D1);
   Serial.println("RFID reader initialized successfully");
   
