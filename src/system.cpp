@@ -25,7 +25,7 @@ void initializeSystem() {
   setupDisplay();
   
   // Show startup message
-  showMessage("MakerPass", "Starting", "Please wait...", TFT_BLUE, 500);
+  showMessage("MakerPass", "Starting", "Please wait...", TFT_BLUE, 0);
   
   // Connect to WiFi
   Serial.println("Connecting to WiFi...");

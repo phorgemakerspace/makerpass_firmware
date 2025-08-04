@@ -119,11 +119,13 @@ void updateDisplay() {
   // Force a full refresh if the relay state or active user changes
   bool needFullRefresh = (relayActive != lastRelayState) || (activeUser != lastActiveUser);
 
-  // If relay just turned off, show main screen and don't process further
+  // If relay just turned off, show main screen ONLY if no message is active
   if (!relayActive && lastRelayState) {
     lastRelayState = relayActive;
     lastActiveUser = activeUser;
-    showMainScreen();
+    if (!messageActive) {
+      showMainScreen();
+    }
     return;
   }
 

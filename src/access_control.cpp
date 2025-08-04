@@ -72,8 +72,9 @@ void handleRFID(uint32_t cardId) {
       runtimeStr += String(seconds);
 
       controlRelay(false);
-      activeUser = "";
       showMessage("Session", "Ended", "Runtime: " + runtimeStr, TFT_BLUE, MESSAGE_TIMEOUT);
+      // Important: Set activeUser to empty AFTER showing the message to prevent display override
+      activeUser = "";
     } else {
       // For doors or inactive machines, turn on the relay
       Serial.print("Activating ");
