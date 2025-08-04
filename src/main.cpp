@@ -10,7 +10,6 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <esp_system.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
 #include <time.h>
@@ -52,7 +51,6 @@ unsigned long lastCardTime = 0;
 bool relayActive = false;
 unsigned long relayStartTime = 0;
 String activeUser = "";
-String lastCardId = "";
 bool isWifiConnected = false;
 bool systemReady = false;
 unsigned long lastMessageTime = 0;  // Track when a message was shown
@@ -69,7 +67,6 @@ void updateDisplay();
 void showMainScreen();
 void controlRelay(bool state);
 void showMessage(String line1, String line2, String line3, uint16_t color, int duration);
-unsigned long rtcTime();
 
 void setup() {
   // Set boot pins to safe states
@@ -223,7 +220,6 @@ void loop() {
     // Convert card ID to string
     char cardIdStr[16];
     sprintf(cardIdStr, "%08X", cardId);
-    lastCardId = String(cardIdStr);
     
     handleRFID(cardId);
     digitalWrite(LED_RFID, LOW);
@@ -285,34 +281,6 @@ bool connectToWifi() {
   // Set WiFi mode
   WiFi.mode(WIFI_STA);
   delay(100);
-  
-  // Scan for networks to verify SSID exists
-  // Serial.println("Scanning for WiFi networks...");
-  // int networks = WiFi.scanNetworks();
-  // bool ssidFound = false;
-  
-  // for (int i = 0; i < networks; i++) {
-  //   Serial.print("Found network: ");
-  //   Serial.print(WiFi.SSID(i));
-  //   Serial.print(" (");
-  //   Serial.print(WiFi.RSSI(i));
-  //   Serial.println(" dBm)");
-    
-  //   if (WiFi.SSID(i) == String(WIFI_SSID)) {
-  //     ssidFound = true;
-  //     Serial.println("Target SSID found!");
-  //   }
-  // }
-  
-  // if (!ssidFound) {
-  //   Serial.println("ERROR: Target SSID not found in scan!");
-  //   Serial.println("Available networks:");
-  //   for (int i = 0; i < networks; i++) {
-  //     Serial.print("  ");
-  //     Serial.println(WiFi.SSID(i));
-  //   }
-  //   return false;
-  // }
   
   // Begin connection
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -416,14 +384,12 @@ bool retrieveResourceConfig() {
     } else {
       Serial.print("JSON parsing error: ");
       Serial.println(error.c_str());
-      resourceName = "MakerPass Device";
       isDoor = (String(DEFAULT_DEVICE_TYPE).equalsIgnoreCase("door"));
       cardPresentRequired = false;
     }
   } else {
     Serial.print("HTTP error: ");
     Serial.println(httpCode);
-    //resourceName = "MakerPass Device";
     isDoor = (String(DEFAULT_DEVICE_TYPE).equalsIgnoreCase("door"));
     cardPresentRequired = false;
   }
@@ -451,11 +417,6 @@ void setupDisplay() {
 }
 
 void setupRFID() {
-  // Serial.print("RFID D0 pin: ");
-  // Serial.println(RFID_D0);
-  // Serial.print("RFID D1 pin: ");
-  // Serial.println(RFID_D1);
-  
   wiegand.begin(RFID_D0, RFID_D1);
   Serial.println("RFID reader initialized successfully");
   
@@ -509,7 +470,7 @@ void handleRFID(uint32_t cardId) {
     
     // Set default values for master key mode when system not ready
     if (!systemReady) {
-      resourceName = "Master Key Mode";
+      // Don't set resourceName here - display logic handles it based on systemReady state
       isDoor = (String(DEFAULT_DEVICE_TYPE).equalsIgnoreCase("door"));  // Use config default
       cardPresentRequired = false;
       doorOpenTime = DEFAULT_DOOR_OPEN_TIME;
@@ -872,11 +833,5 @@ void showMainScreen() {
     tft.setTextColor(TFT_RED);
     tft.print("Disconnected");
   }
-}
-
-unsigned long rtcTime() {
-  time_t now;
-  time(&now);
-  return now;
 }
 
