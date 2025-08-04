@@ -179,22 +179,22 @@ void setup() {
 void showMessage(String line1, String line2, String line3, uint16_t color, int duration) {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(color);
-  tft.setTextFont(2);
+  tft.setTextFont(4);  // Increased from 2
   tft.setTextSize(1);
   
   // Center text on 320x170 display (landscape)
-  int x = 30;
+  int x = 20;  // Adjusted for larger text
   
-  tft.setCursor(x, 40);
+  tft.setCursor(x, 30);
   tft.print(line1);
   
   tft.setCursor(x, 70);
   tft.print(line2);
   
   tft.setTextColor(TFT_WHITE);
-  tft.setTextFont(1);
+  tft.setTextFont(2);  // Increased from 1
   tft.setTextSize(1);
-  tft.setCursor(x, 110);
+  tft.setCursor(x, 120);
   tft.print(line3);
   
   delay(duration);
@@ -423,7 +423,7 @@ bool retrieveResourceConfig() {
   } else {
     Serial.print("HTTP error: ");
     Serial.println(httpCode);
-    resourceName = "MakerPass Device";
+    //resourceName = "MakerPass Device";
     isDoor = (String(DEFAULT_DEVICE_TYPE).equalsIgnoreCase("door"));
     cardPresentRequired = false;
   }
@@ -501,7 +501,7 @@ void handleRFID(uint32_t cardId) {
     // If system is not ready, only master key works
     if (!systemReady && !String(cardIdStr).equals(String(MASTER_RFID_KEY))) {
       Serial.println("System offline - only master key allowed");
-      showMessage("SYSTEM", "OFFLINE", "Use master key", TFT_RED, 2000);
+      showMessage("ACCESS", "DENIED", "Use master key", TFT_RED, 2000);
       lastMessageTime = millis();  // Start timer to return to main screen
       Serial.println("========================================");
       return;
@@ -566,7 +566,7 @@ void handleRFID(uint32_t cardId) {
       lastMessageTime = millis();  // Start timer to return to main screen
     } else if (!systemReady) {
       Serial.println("Reason: System offline - use master key");
-      showMessage("SYSTEM", "OFFLINE", "Use master key", TFT_RED, 2000);
+      showMessage("ACCESS", "DENIED", "Use master key", TFT_RED, 2000);
       lastMessageTime = millis();  // Start timer to return to main screen
     } else if (!isWifiConnected) {
       Serial.println("Reason: No WiFi connection");
@@ -705,7 +705,7 @@ void updateDisplay() {
   if (needFullRefresh) {
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE);
-    tft.setTextFont(2);
+    tft.setTextFont(4);  // Increased from 2
     tft.setTextSize(1);
     
     // Display resource name at top
@@ -719,16 +719,16 @@ void updateDisplay() {
     }
     
     // Display status
-    tft.setCursor(10, 40);
+    tft.setCursor(10, 45);
     if (relayActive) {
       tft.setTextColor(TFT_GREEN);
       tft.print("ACTIVE");
       
       // Show active user
       tft.setTextColor(TFT_WHITE);
-      tft.setTextFont(1);
+      tft.setTextFont(2);  // Increased from 1
       tft.setTextSize(1);
-      tft.setCursor(10, 65);
+      tft.setCursor(10, 75);
       tft.print("User: ");
       tft.print(activeUser);
       
@@ -738,9 +738,9 @@ void updateDisplay() {
       tft.print("INACTIVE");
       
       tft.setTextColor(TFT_WHITE);
-      tft.setTextFont(1);
+      tft.setTextFont(2);  // Increased from 1
       tft.setTextSize(1);
-      tft.setCursor(10, 70);
+      tft.setCursor(10, 80);
       if (systemReady) {
         tft.print("Scan RFID card to activate");
       } else {
@@ -749,7 +749,8 @@ void updateDisplay() {
     }
     
     // WiFi status at bottom
-    tft.setCursor(10, 140);
+    tft.setCursor(10, 145);
+    tft.setTextFont(2);  // Increased from 1
     tft.print("WiFi: ");
     if (isWifiConnected) {
       tft.setTextColor(TFT_GREEN);
@@ -766,7 +767,7 @@ void updateDisplay() {
   // Update runtime area without clearing screen (only when relay is active)
   if (relayActive) {
     // Clear just the runtime area by drawing a black rectangle
-    tft.fillRect(10, 85, 300, 50, TFT_BLACK);
+    tft.fillRect(10, 100, 300, 40, TFT_BLACK);  // Adjusted height for larger text
     
     // Show runtime
     unsigned long runTime = (millis() - relayStartTime) / 1000;
@@ -775,9 +776,9 @@ void updateDisplay() {
     unsigned long seconds = runTime % 60;
     
     tft.setTextColor(TFT_WHITE);
-    tft.setTextFont(1);
+    tft.setTextFont(2);  // Increased from 1
     tft.setTextSize(1);
-    tft.setCursor(10, 85);
+    tft.setCursor(10, 105);
     tft.print("Runtime: ");
     if (hours < 10) tft.print("0");
     tft.print(hours);
@@ -792,7 +793,7 @@ void updateDisplay() {
     if (isDoor && systemReady) {
       unsigned long remainingTime = (doorOpenTime - (millis() - relayStartTime)) / 1000;
       if (remainingTime > 0) {
-        tft.setCursor(10, 105);
+        tft.setCursor(10, 125);
         tft.print("Door closes in: ");
         tft.print(remainingTime);
         tft.print("s");
@@ -826,11 +827,11 @@ void controlRelay(bool state) {
 void showMainScreen() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
-  tft.setTextFont(2);
+  tft.setTextFont(4);  // Increased from 2
   tft.setTextSize(1);
   
   // Display device name at top
-  tft.setCursor(10, 20);
+  tft.setCursor(10, 15);
   if (resourceName.length() > 0) {
     tft.print(resourceName);
   } else if (systemReady) {
@@ -839,16 +840,30 @@ void showMainScreen() {
     tft.print("Master Key Mode");
   }
   
-  // Display main message
-  tft.setCursor(10, 60);
-  tft.setTextColor(TFT_GREEN);
-  tft.print("Ready. Scan card.");
+  // Display main message with different text/color based on system state
+  tft.setCursor(10, 65);
+  tft.setTextFont(4);  // Keep large for main message
+  
+  if (!systemReady) {
+    tft.setTextColor(TFT_BLUE);
+    tft.print("System Offline.");
+    tft.setCursor(10, 100);
+    tft.print("Scan Master Key.");
+  } else if (!isWifiConnected) {
+    tft.setTextColor(TFT_BLUE);
+    tft.print("WiFi Unavailable.");
+    tft.setCursor(10, 100);
+    tft.print("Scan Master Key.");
+  } else {
+    tft.setTextColor(TFT_GREEN);
+    tft.print("Ready. Scan card.");
+  }
   
   // WiFi status at bottom
   tft.setTextColor(TFT_WHITE);
-  tft.setTextFont(1);
+  tft.setTextFont(2);  // Increased from 1
   tft.setTextSize(1);
-  tft.setCursor(10, 120);
+  tft.setCursor(10, 130);
   tft.print("WiFi: ");
   if (isWifiConnected) {
     tft.setTextColor(TFT_GREEN);
