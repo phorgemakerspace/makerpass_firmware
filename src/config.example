@@ -1,0 +1,49 @@
+/*
+ * MakerPass Configuration
+ * 
+ * Edit these values to configure your MakerPass device.
+ * This is the only file non-technical users need to modify.
+ */
+
+#include "config.h"
+
+// =============================================================================
+// WIFI CONFIGURATION
+// =============================================================================
+// Enter your WiFi network name and password
+const char* WIFI_SSID = "your_wifi_ssid";  // Replace with your WiFi SSID
+const char* WIFI_PASSWORD = "your_wifi_password";  // Replace with your WiFi password
+
+// =============================================================================
+// API CONFIGURATION  
+// =============================================================================
+// Your MakerPass server URL (usually your Moodle site)
+const char* API_URL = "https://your_moodle_site.com";  // Replace with your Moodle URL
+
+// API Key from your MakerPass plugin settings
+const char* API_KEY = "your_api_key";  // Replace with your API key
+
+// Equipment ID from your MakerPass plugin (unique identifier for this device)
+const char* EQUIPMENT_ID = "ABC123";
+
+// =============================================================================
+// DEVICE CONFIGURATION
+// =============================================================================
+// Device type: "door" or "machine"
+const char* DEVICE_TYPE = "machine";
+
+// Master RFID card that works even when offline (8 hex digits)
+// Scan your master card and replace this with the ID shown in serial monitor
+const char* MASTER_RFID_KEY = "FFFFFFFF";
+
+// =============================================================================
+// ADVANCED SETTINGS
+// =============================================================================
+// You typically don't need to change these unless instructed
+
+// Door auto-close time in milliseconds (5000 = 5 seconds)
+// Only applies when DEVICE_TYPE is "door"
+const unsigned long DOOR_CLOSE_TIME = 5000;
+
+// Display timeout for messages in milliseconds (3000 = 3 seconds)
+const unsigned long MESSAGE_TIMEOUT = 3000;
