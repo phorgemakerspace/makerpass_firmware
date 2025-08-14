@@ -16,4 +16,5 @@ void showTempMessage(const String &line1, const String &line2 = "", uint16_t tex
 void showBootMessage(const String &message, const String &detail = "", uint16_t textColor = TFT_WHITE);
 void showIdleScreen();
 void showRuntimeDisplay(const String &userName, const String &runtime, bool initialDraw = false);
+void showDoorCountdown(const String &header, const String &seconds, bool initialDraw = false);
 void resetRuntimeDisplay();

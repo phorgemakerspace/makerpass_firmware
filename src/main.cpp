@@ -142,7 +142,7 @@ void setup() {
   // Initialise the WebSocket client
   initWebSocket();
   
-  // Prepare the status bar for subsequent screens
+  // Prepare the status bars for subsequent screens
   showStatusBar();
 }
 
@@ -232,15 +232,15 @@ void updateTimers() {
   if (relayActive && strcmp(DEVICE_TYPE, "door") == 0) {
     if (now >= relayEndTime) {
       lockRelay();
-      showMessage("Ready", "Scan card", COLOR_MSG_OK);
+      showIdleScreen();
+      Serial.println(F("[RELAY] Door relay turned off"));
     } else {
       static unsigned long lastUpdate = 0;
-      if (now - lastUpdate >= 1000) {
-        // Display countdown seconds remaining
+      static bool firstDrawDoor = true;
+      if (now - lastUpdate >= 1000 || firstDrawDoor) {
         uint32_t remaining = (relayEndTime - now + 999) / 1000;
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%s in %lu s", activeUser.c_str(), (unsigned long)remaining);
-        showTempMessage("Access Granted", String(buf), COLOR_MSG_OK);
+        showDoorCountdown("Access Granted", String(remaining) + " s", firstDrawDoor);
+        firstDrawDoor = false;
         lastUpdate = now;
       }
     }

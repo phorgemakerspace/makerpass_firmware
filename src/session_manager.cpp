@@ -36,8 +36,9 @@ void unlockRelay(const String &userName) {
   digitalWrite(PIN_RELAY, HIGH);
   digitalWrite(PIN_LED_RELAY, HIGH);
   activeUser = userName;
-  // update UI
-  showTempMessage("Access Granted", userName, COLOR_MSG_OK);
+  // Initial UI: Access Granted with starting seconds
+  uint32_t remaining = (relayEndTime - millis() + 999) / 1000;
+  showDoorCountdown("Access Granted", String(remaining) + " s", true);
   Serial.print(F("[RELAY] Door unlocked for user: "));
   Serial.println(userName);
 }
